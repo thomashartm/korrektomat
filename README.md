@@ -18,7 +18,7 @@ Teachers scan student papers, configure a grading run, and the application handl
 - **Multi-provider support** — swap between Anthropic Claude and Google Gemini models without workflow changes
 - **Structured scoring** — evaluates content accuracy (Inhalt) and language proficiency (Sprache) across multiple dimensions: communicative competence, vocabulary availability, and grammatical correctness
 - **Error categorization** — classifies language errors by type (Grammatik, Orthografie, Vokabular, Ausdruck, etc.)
-- **German grading scale** — calculates scores in Notenpunkte (0–15) with automatic grade labels
+- **Oberstufen grading scale** — calculates scores in Notenpunkte (0–15) with automatic grade labels
 - **Professional DOCX output** — generates correction documents with inline annotations, scoring tables, and comments ready for distribution
 - **Batch processing** — grade entire classes sequentially with pause/resume, progress tracking, and inter-request delays for rate-limit safety
 - **File-system workspace** — all data stored as JSON manifests and images on disk; no database required
@@ -30,144 +30,18 @@ Teachers scan student papers, configure a grading run, and the application handl
 
 ## Architecture
 
-Korrektomat is an **Electron** desktop application with a clear three-layer separation:
-
-```
-┌──────────────────────────────────────────────────────┐
-│                   Renderer (Vue 3)                    │
-│   Views · Components · Pinia Stores · Vue Router      │
-├────────────────────── IPC ───────────────────────────┤
-│               Main Process (Electron)                 │
-│   Window management · IPC handlers · File watcher     │
-├──────────────────────────────────────────────────────┤
-│                Engine (Node.js / TS)                   │
-│   AI providers · Grading pipeline · Workspace mgmt    │
-│   Image processing · DOCX generation                  │
-└──────────────────────────────────────────────────────┘
-```
-
-### Source Layout
-
-```
-src/
-├── main/                       # Electron main process
-│   ├── index.ts                # Window creation, IPC registration
-│   ├── ipc/                    # IPC handler modules
-│   │   ├── grading.ipc.ts      #   Grading operations
-│   │   ├── workspace.ipc.ts    #   Workspace CRUD
-│   │   ├── settings.ipc.ts     #   App configuration
-│   │   └── files.ipc.ts        #   File operations
-│   └── services/
-│       └── file-watcher.service.ts
-│
-├── preload/                    # Electron preload (safe API bridge)
-│   └── index.ts
-│
-├── renderer/                   # Vue 3 frontend
-│   └── src/
-│       ├── App.vue
-│       ├── router/             # Hash-based routing
-│       ├── stores/             # Pinia state management
-│       │   ├── grading.store.ts
-│       │   ├── workspace.store.ts
-│       │   └── settings.store.ts
-│       ├── views/              # Page-level components
-│       │   ├── DashboardView.vue
-│       │   ├── RunView.vue
-│       │   ├── StudentView.vue
-│       │   ├── GradingView.vue
-│       │   └── SettingsView.vue
-│       └── components/         # Reusable UI components
-│
-└── engine/                     # Core business logic (framework-agnostic)
-    ├── ai/                     # AI provider abstraction
-    │   ├── ai.provider.ts      #   Provider interface + factory
-    │   ├── providers/
-    │   │   ├── claude.provider.ts
-    │   │   └── gemini.provider.ts
-    │   └── prompt/
-    │       └── prompt.builder.ts
-    ├── grading/                # Grading orchestration
-    │   ├── grading.pipeline.ts #   Single-student pipeline
-    │   ├── batch.grader.ts     #   Batch processing
-    │   └── grading.parser.ts   #   AI response parsing + validation
-    ├── workspace/              # File-system workspace management
-    │   ├── workspace.manager.ts
-    │   ├── workspace.schema.ts #   Zod schemas + model presets
-    │   └── workspace.constants.ts
-    ├── image/                  # Image processing (Sharp)
-    │   └── image.processor.ts
-    └── docx/                   # DOCX document generation
-        ├── docx.builder.ts
-        ├── docx.generator.ts
-        └── docx.styles.ts
-```
-
-### Key Design Decisions
-
-- **No database.** All state is persisted as JSON manifest files on disk. The file system is the single source of truth.
-- **AI provider abstraction.** A common `AIProvider` interface allows swapping between Anthropic Claude and Google Gemini without changing pipeline code.
-- **Engine is framework-agnostic.** The `src/engine/` layer has no dependency on Electron or Vue and could be reused in other contexts.
-- **Zod validation at boundaries.** All manifests are validated with Zod schemas when read from disk, catching corruption early.
-
-## Grading Pipeline
-
-When a student is graded, the pipeline executes these steps:
-
-1. **Load** — Read run manifest and student manifest, validate preconditions
-2. **Process inbox** — Move scanned images from `inbox/` to `scans/`, compress with Sharp
-3. **Load images** — Read task sheet pages and student scans as base64
-4. **Build prompt** — Assemble system prompt from base template + agent rules + JSON schema
-5. **Call AI** — Stream the request to Claude or Gemini with all images attached
-6. **Parse & validate** — Extract structured JSON from the AI response, validate with Zod. On parse failure, retry with a corrective nudge message
-7. **Generate DOCX** — Build a professional correction document with inline annotations and scoring tables
-8. **Save state** — Persist `grading_result.json` and update the student manifest
-
-## Workspace Structure
-
-Korrektomat organizes all data under a configurable workspace root (default: `~/Documents/Korrekturen`):
-
-```
-~/Documents/Korrekturen/
-└── {run-slug}/
-    ├── run.json                        # Run manifest (metadata, student list)
-    ├── prompts/
-    │   ├── base-prompt.md              # Grading instructions for the AI
-    │   └── agent.md                    # Additional agent rules
-    ├── task-sheet/
-    │   └── compressed/                 # Processed task sheet images
-    └── students/
-        └── {student-slug}/
-            ├── student.json            # Student manifest (status, scan list, history)
-            ├── inbox/                  # Drop scanned images here
-            ├── scans/                  # Processed scans (compressed)
-            └── output/
-                ├── grading_result.json # Structured AI grading output
-                └── Klausurkorrektur_*.docx
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Desktop shell | Electron 39 |
-| Frontend | Vue 3 (Composition API), Pinia, Vue Router, TailwindCSS 4 |
-| Build tooling | electron-vite (Vite 7), TypeScript 5.9 |
-| AI providers | Anthropic Claude SDK, Google Generative AI SDK |
-| Document generation | docx (OOXML) |
-| Image processing | Sharp |
-| Validation | Zod |
-| Code quality | ESLint 9, Prettier, Vitest |
-| Packaging | electron-builder |
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full architecture documentation, including the source layout, design decisions, grading pipeline, workspace structure, and tech stack.
 
 ## Supported AI Models
 
-| Preset | Provider | Model | Default Temperature |
-|--------|----------|-------|-------------------|
-| `claude-sonnet` | Anthropic | `claude-sonnet-4-20250514` | 0.3 |
-| `claude-opus` | Anthropic | `claude-opus-4-0-20250514` | 0.2 |
-| `gemini-flash` | Google | `gemini-2.0-flash` | 0.3 |
-| `gemini-pro` | Google | `gemini-2.5-pro` | 0.2 |
+| Preset | Provider | Model | Default Temperature | Tested |
+|--------|----------|-------|-------------------|--------|
+| `claude-sonnet` | Anthropic | `claude-sonnet-4-20250514` | 0.3 | Yes |
+| `claude-opus` | Anthropic | `claude-opus-4-0-20250514` | 0.2 | Yes |
+| `gemini-flash` | Google | `gemini-2.0-flash` | 0.3 | No |
+| `gemini-pro` | Google | `gemini-2.5-pro` | 0.2 | No |
+
+Grading quality has been validated with **Claude Opus 4.6** and **Claude Sonnet 4.6**. The Gemini models are supported but have not been tested yet.
 
 ## Prerequisites
 
