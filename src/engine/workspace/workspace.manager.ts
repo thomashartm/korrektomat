@@ -4,10 +4,16 @@
  * inbox processing, and grading result persistence.
  *
  * All operations are file-system based (JSON manifests, no database).
+ *
+ * Workspace layout:
+ * - Human-facing files (prompts, scans, DOCX) live in visible directories
+ * - Manifests and metadata live in a hidden .korrektomat/ subdirectory per run
+ * - App-level config lives in ~/.korrektomat/
  */
 
 import * as fs from 'fs/promises'
 import * as path from 'path'
+import { homedir } from 'os'
 import slugify from 'slugify'
 
 import type { ZodType } from 'zod'
@@ -36,8 +42,11 @@ import {
   DIR_INBOX,
   DIR_SCANS,
   DIR_OUTPUT,
+  DIR_META,
   runDir,
   runManifestPath,
+  metaDir,
+  metaStudentDir,
   studentDir,
   studentManifestPath,
   taskSheetDir,
@@ -85,6 +94,52 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
+// ── WORKSPACE ACCESS ───────────────────────────────────────────────────────
+
+/**
+ * Error thrown when the workspace directory is inaccessible (EPERM, ENOENT, etc.).
+ */
+export class WorkspaceAccessError extends Error {
+  constructor(
+    public readonly attemptedPath: string,
+    public readonly fallbackAttempted: boolean,
+    cause?: Error
+  ) {
+    super(`Workspace inaccessible: ${attemptedPath}`)
+    this.name = 'WorkspaceAccessError'
+    this.cause = cause
+  }
+}
+
+/**
+ * Verify workspace root is accessible (readable + writable).
+ * If the configured path fails, tries creating it first.
+ * If that also fails and the path differs from the default, tries the default.
+ * Throws WorkspaceAccessError if nothing works.
+ */
+export async function resolveAccessibleWorkspace(configuredRoot: string): Promise<string> {
+  // Try configured path
+  try {
+    await fs.mkdir(configuredRoot, { recursive: true })
+    await fs.access(configuredRoot, fs.constants.R_OK | fs.constants.W_OK)
+    return configuredRoot
+  } catch (primaryError) {
+    // If configured path IS the default, no fallback to try
+    if (configuredRoot === DEFAULT_WORKSPACE_ROOT) {
+      throw new WorkspaceAccessError(configuredRoot, false, primaryError as Error)
+    }
+
+    // Try fallback to default
+    try {
+      await fs.mkdir(DEFAULT_WORKSPACE_ROOT, { recursive: true })
+      await fs.access(DEFAULT_WORKSPACE_ROOT, fs.constants.R_OK | fs.constants.W_OK)
+      return DEFAULT_WORKSPACE_ROOT
+    } catch {
+      throw new WorkspaceAccessError(configuredRoot, true, primaryError as Error)
+    }
+  }
+}
+
 // ── APP CONFIG ──────────────────────────────────────────────────────────────
 
 /**
@@ -125,6 +180,88 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<void> {
   await saveConfig(updated)
 }
 
+// ── MIGRATION ──────────────────────────────────────────────────────────────
+
+const LEGACY_CONFIG_DIR = path.join(homedir(), '.korrekturen')
+
+/**
+ * Migrate from legacy config/workspace layouts if needed.
+ * 1. Renames ~/.korrekturen → ~/.korrektomat (legacy config dir)
+ * 2. Moves workspace-resident manifests into hidden .korrektomat/ subdirectories
+ * Non-destructive: copies manifests, leaves originals as backup.
+ */
+export async function migrateIfNeeded(workspaceRoot: string): Promise<void> {
+  // Step A: Migrate legacy config directory
+  if (await dirExists(LEGACY_CONFIG_DIR)) {
+    if (!(await dirExists(DEFAULT_CONFIG_DIR))) {
+      await fs.rename(LEGACY_CONFIG_DIR, DEFAULT_CONFIG_DIR)
+    } else {
+      // Both exist — copy config.json if missing in new location
+      const legacyConfig = path.join(LEGACY_CONFIG_DIR, 'config.json')
+      if ((await fileExists(legacyConfig)) && !(await fileExists(DEFAULT_CONFIG_PATH))) {
+        await fs.copyFile(legacyConfig, DEFAULT_CONFIG_PATH)
+      }
+    }
+  }
+
+  // Step B: Move workspace-resident manifests into hidden .korrektomat/ dirs
+  if (!(await dirExists(workspaceRoot))) return
+
+  let entries: Awaited<ReturnType<typeof fs.readdir>>
+  try {
+    entries = await fs.readdir(workspaceRoot, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
+    const runSlug = entry.name
+    const runDirPath = path.join(workspaceRoot, runSlug)
+
+    // Check for legacy run.json at root of run dir (not in .korrektomat/)
+    const legacyRunManifest = path.join(runDirPath, 'run.json')
+    const newRunManifest = runManifestPath(workspaceRoot, runSlug)
+
+    if ((await fileExists(legacyRunManifest)) && !(await fileExists(newRunManifest))) {
+      await fs.mkdir(path.dirname(newRunManifest), { recursive: true })
+      await fs.copyFile(legacyRunManifest, newRunManifest)
+
+      // Migrate student manifests
+      const studentsRoot = path.join(runDirPath, DIR_STUDENTS)
+      if (await dirExists(studentsRoot)) {
+        let studentEntries: Awaited<ReturnType<typeof fs.readdir>>
+        try {
+          studentEntries = await fs.readdir(studentsRoot, { withFileTypes: true })
+        } catch {
+          continue
+        }
+
+        for (const sEntry of studentEntries) {
+          if (!sEntry.isDirectory() || sEntry.name.startsWith('.')) continue
+          const studentSlug = sEntry.name
+
+          // student.json
+          const legacyStudent = path.join(studentsRoot, studentSlug, 'student.json')
+          const newStudent = studentManifestPath(workspaceRoot, runSlug, studentSlug)
+          if ((await fileExists(legacyStudent)) && !(await fileExists(newStudent))) {
+            await fs.mkdir(path.dirname(newStudent), { recursive: true })
+            await fs.copyFile(legacyStudent, newStudent)
+          }
+
+          // grading_result.json
+          const legacyResult = path.join(studentsRoot, studentSlug, DIR_OUTPUT, 'grading_result.json')
+          const newResult = gradingResultPath(workspaceRoot, runSlug, studentSlug)
+          if ((await fileExists(legacyResult)) && !(await fileExists(newResult))) {
+            await fs.mkdir(path.dirname(newResult), { recursive: true })
+            await fs.copyFile(legacyResult, newResult)
+          }
+        }
+      }
+    }
+  }
+}
+
 // ── RUN CRUD ────────────────────────────────────────────────────────────────
 
 export interface CreateRunParams {
@@ -150,10 +287,13 @@ export async function createRun(
     throw new Error(`Run directory already exists: ${slug}`)
   }
 
-  // Create directory scaffold
+  // Create human-facing directory scaffold
   await fs.mkdir(path.join(dir, DIR_PROMPTS), { recursive: true })
   await fs.mkdir(path.join(dir, DIR_TASK_SHEET, DIR_TASK_SHEET_COMPRESSED), { recursive: true })
   await fs.mkdir(path.join(dir, DIR_STUDENTS), { recursive: true })
+
+  // Create hidden metadata directory
+  await fs.mkdir(metaDir(workspaceRoot, slug), { recursive: true })
 
   const now = nowISO()
   const manifest: RunManifest = {
@@ -170,12 +310,14 @@ export async function createRun(
     updatedAt: now
   }
 
+  // Write manifest to hidden .korrektomat/ directory
   await writeJSON(runManifestPath(workspaceRoot, slug), manifest)
   return manifest
 }
 
 /**
  * List all runs in the workspace.
+ * Discovers runs by scanning workspace directories for hidden .korrektomat/run.json.
  */
 export async function listRuns(workspaceRoot: string): Promise<RunManifest[]> {
   await fs.mkdir(workspaceRoot, { recursive: true })
@@ -184,7 +326,7 @@ export async function listRuns(workspaceRoot: string): Promise<RunManifest[]> {
   const runs: RunManifest[] = []
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue
     const manifestPath = runManifestPath(workspaceRoot, entry.name)
     if (await fileExists(manifestPath)) {
       try {
@@ -211,13 +353,14 @@ export async function getRun(workspaceRoot: string, slug: string): Promise<RunMa
 }
 
 /**
- * Delete a run and all its contents.
+ * Delete a run and all its contents (both visible and hidden).
  */
 export async function deleteRun(workspaceRoot: string, slug: string): Promise<void> {
   const dir = runDir(workspaceRoot, slug)
   if (!(await dirExists(dir))) {
     throw new Error(`Run not found: ${slug}`)
   }
+  // Deleting the run dir also removes .korrektomat/ inside it
   await fs.rm(dir, { recursive: true, force: true })
 }
 
@@ -284,7 +427,7 @@ export async function addStudent(
     throw new Error(`Student already exists: ${slug}`)
   }
 
-  // Create student directory scaffold
+  // Create human-facing student directory scaffold
   await fs.mkdir(path.join(dir, DIR_INBOX), { recursive: true })
   await fs.mkdir(path.join(dir, DIR_SCANS), { recursive: true })
   await fs.mkdir(path.join(dir, DIR_OUTPUT), { recursive: true })
@@ -300,6 +443,7 @@ export async function addStudent(
     updatedAt: now
   }
 
+  // Write manifest to hidden .korrektomat/ directory
   await writeJSON(studentManifestPath(workspaceRoot, runSlug, slug), manifest)
 
   // Add to run's student list
@@ -365,7 +509,7 @@ export async function getStudent(
 }
 
 /**
- * Remove a student from a run (deletes directory and manifest).
+ * Remove a student from a run (deletes both visible and hidden data).
  */
 export async function removeStudent(
   workspaceRoot: string,
@@ -373,11 +517,22 @@ export async function removeStudent(
   studentSlug: string
 ): Promise<void> {
   const dir = studentDir(workspaceRoot, runSlug, studentSlug)
-  if (!(await dirExists(dir))) {
+  const metaStudDir = metaStudentDir(workspaceRoot, runSlug, studentSlug)
+
+  // Verify student exists (check either location)
+  if (!(await dirExists(dir)) && !(await dirExists(metaStudDir))) {
     throw new Error(`Student not found: ${studentSlug}`)
   }
 
-  await fs.rm(dir, { recursive: true, force: true })
+  // Delete human-facing student directory
+  if (await dirExists(dir)) {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+
+  // Delete hidden metadata
+  if (await dirExists(metaStudDir)) {
+    await fs.rm(metaStudDir, { recursive: true, force: true })
+  }
 
   // Remove from run's student list
   await updateRunManifest(workspaceRoot, runSlug, (m) => ({
@@ -454,7 +609,7 @@ export async function processStudentInbox(
     await fs.unlink(inputPath)
   }
 
-  // Update student manifest
+  // Update student manifest (writes to hidden .korrektomat/ dir)
   await updateStudentManifest(workspaceRoot, runSlug, studentSlug, (m) => ({
     ...m,
     scans: [...m.scans, ...newScans],
@@ -502,7 +657,7 @@ export async function markGradingComplete(
   result: GradingResult,
   usage?: { inputTokens: number; outputTokens: number }
 ): Promise<void> {
-  // Save grading result JSON
+  // Save grading result JSON to hidden .korrektomat/ directory
   const resultPath = gradingResultPath(workspaceRoot, runSlug, studentSlug)
   await writeJSON(resultPath, result)
 

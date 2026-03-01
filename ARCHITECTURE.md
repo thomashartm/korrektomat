@@ -76,9 +76,11 @@ src/
 ## Key Design Decisions
 
 - **No database.** All state is persisted as JSON manifest files on disk. The file system is the single source of truth.
+- **Split workspace layout.** Human-facing files (prompts, scans, DOCX) live in visible directories. Manifests and metadata live in a hidden `.korrektomat/` subdirectory within each run. App-level config lives in `~/.korrektomat/`.
 - **AI provider abstraction.** A common `AIProvider` interface allows swapping between Anthropic Claude and Google Gemini without changing pipeline code.
 - **Engine is framework-agnostic.** The `src/engine/` layer has no dependency on Electron or Vue and could be reused in other contexts.
 - **Zod validation at boundaries.** All manifests are validated with Zod schemas when read from disk, catching corruption early.
+- **Graceful EPERM handling.** If the workspace directory is inaccessible (e.g. macOS TCC restrictions), the app tries a fallback path before surfacing an error to the user.
 
 ## Grading Pipeline
 
@@ -95,25 +97,31 @@ When a student is graded, the pipeline executes these steps:
 
 ## Workspace Structure
 
-Korrektomat organizes all data under a configurable workspace root (default: `~/Documents/Korrekturen`):
+Korrektomat uses a split layout. App config lives in `~/.korrektomat/`. Per-run data lives under a configurable workspace root (default: `~/Korrekturen`), with manifests hidden in a `.korrektomat/` subdirectory within each run:
 
 ```
-~/Documents/Korrekturen/
+~/.korrektomat/
+└── config.json                             # App config (API keys, workspace root, default model)
+
+~/Korrekturen/
 └── {run-slug}/
-    ├── run.json                        # Run manifest (metadata, student list)
-    ├── prompts/
-    │   ├── base-prompt.md              # Grading instructions for the AI
-    │   └── agent.md                    # Additional agent rules
+    ├── .korrektomat/                       # Hidden metadata
+    │   ├── run.json                        # Run manifest (metadata, student list)
+    │   └── students/
+    │       └── {student-slug}/
+    │           ├── student.json            # Student manifest (status, scan list, history)
+    │           └── grading_result.json     # Structured AI grading output
+    ├── prompts/                            # Human-facing
+    │   ├── base-prompt.md                  # Grading instructions for the AI
+    │   └── agent.md                        # Additional agent rules
     ├── task-sheet/
-    │   └── compressed/                 # Processed task sheet images
+    │   └── compressed/                     # Processed task sheet images
     └── students/
         └── {student-slug}/
-            ├── student.json            # Student manifest (status, scan list, history)
-            ├── inbox/                  # Drop scanned images here
-            ├── scans/                  # Processed scans (compressed)
+            ├── inbox/                      # Drop scanned images here
+            ├── scans/                      # Processed scans (compressed)
             └── output/
-                ├── grading_result.json # Structured AI grading output
-                └── Klausurkorrektur_*.docx
+                └── Klausurkorrektur_*.docx # Generated correction document
 ```
 
 ## Tech Stack

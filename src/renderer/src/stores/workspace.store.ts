@@ -30,6 +30,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const students = ref<StudentSummary[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const workspaceAccessError = ref<{ path: string; fallbackAttempted: boolean } | null>(null)
 
   const sortedRuns = computed(() =>
     [...runs.value].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -80,18 +81,29 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     students.value = []
   }
 
+  function registerAccessErrorHandler(): void {
+    window.api.workspace.onAccessError((event) => {
+      workspaceAccessError.value = event
+      error.value = event.fallbackAttempted
+        ? `Arbeitsverzeichnis nicht erreichbar: ${event.path} (Fallback ebenfalls fehlgeschlagen)`
+        : `Arbeitsverzeichnis nicht erreichbar: ${event.path}`
+    })
+  }
+
   return {
     runs,
     activeRun,
     students,
     loading,
     error,
+    workspaceAccessError,
     sortedRuns,
     gradedStudents,
     pendingStudents,
     loadRuns,
     loadStudents,
     setActiveRun,
-    clearActiveRun
+    clearActiveRun,
+    registerAccessErrorHandler
   }
 })

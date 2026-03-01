@@ -71,11 +71,11 @@ This starts Electron with hot-reload via electron-vite. The app opens a window a
 
 On first launch, open **Settings** and configure:
 
-1. **Workspace root** — where grading runs are stored (default: `~/Documents/Korrekturen`)
+1. **Workspace root** — where grading runs are stored (default: `~/Korrekturen`)
 2. **API keys** — enter your Anthropic and/or Google API key
 3. **Default model** — select which AI model to use for grading
 
-Configuration is saved to `~/.korrekturen/config.json`.
+Configuration is saved to `~/.korrektomat/config.json`.
 
 ## Building for Production
 

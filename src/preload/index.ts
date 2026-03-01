@@ -32,7 +32,13 @@ const api = {
     removeStudent: (runSlug: string, studentSlug: string): Promise<void> =>
       ipcRenderer.invoke('workspace:removeStudent', runSlug, studentSlug),
     openStudentFolder: (runSlug: string, studentSlug: string): Promise<void> =>
-      ipcRenderer.invoke('workspace:openStudentFolder', runSlug, studentSlug)
+      ipcRenderer.invoke('workspace:openStudentFolder', runSlug, studentSlug),
+
+    onAccessError: (
+      callback: (event: { path: string; fallbackAttempted: boolean }) => void
+    ): void => {
+      ipcRenderer.on('workspace:accessError', (_event, data) => callback(data))
+    }
   },
 
   files: {

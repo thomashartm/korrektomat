@@ -13,6 +13,7 @@ import { registerGradingIPC } from './ipc/grading.ipc'
 import { registerSettingsIPC } from './ipc/settings.ipc'
 import { registerFilesIPC } from './ipc/files.ipc'
 import { startFileWatcher, stopFileWatcher } from './services/file-watcher.service'
+import { migrateIfNeeded, loadConfig } from '../engine/workspace/workspace.manager'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -58,6 +59,14 @@ app.whenReady().then(async () => {
   registerGradingIPC()
   registerSettingsIPC()
   registerFilesIPC()
+
+  // Run migration from legacy config/workspace layouts (non-fatal)
+  try {
+    const config = await loadConfig()
+    await migrateIfNeeded(config.workspaceRoot)
+  } catch (err) {
+    console.error('Migration failed (non-fatal):', err)
+  }
 
   // Start file watcher for inbox directories
   await startFileWatcher()
