@@ -10,6 +10,7 @@ import {
   createRun,
   listRuns,
   getRun,
+  updateRun,
   deleteRun,
   setTaskSheet,
   addStudent,
@@ -60,6 +61,14 @@ export function registerWorkspaceIPC(): void {
     const workspaceRoot = await getWorkspaceRoot()
     return getRun(workspaceRoot, slug)
   })
+
+  ipcMain.handle(
+    'workspace:updateRun',
+    async (_event, slug: string, updates: any) => {
+      const workspaceRoot = await getWorkspaceRoot()
+      return updateRun(workspaceRoot, slug, updates)
+    }
+  )
 
   ipcMain.handle('workspace:deleteRun', async (_event, slug: string) => {
     const workspaceRoot = await getWorkspaceRoot()

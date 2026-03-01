@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkspaceStore } from '../stores/workspace.store'
+import CreateRunDialog from '../components/CreateRunDialog.vue'
 
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
+const showCreateDialog = ref(false)
 
 onMounted(() => {
   workspaceStore.loadRuns()
 })
 
 function openRun(slug: string): void {
+  router.push({ name: 'run', params: { slug } })
+}
+
+function onRunCreated(slug: string): void {
+  showCreateDialog.value = false
   router.push({ name: 'run', params: { slug } })
 }
 
@@ -27,7 +34,7 @@ function formatDate(iso: string): string {
   <div class="dashboard">
     <header class="page-header">
       <h1>Dashboard</h1>
-      <button class="btn-primary">
+      <button class="btn-primary" @click="showCreateDialog = true">
         + Neuer Lauf
       </button>
     </header>
@@ -43,29 +50,34 @@ function formatDate(iso: string): string {
     <div v-else class="runs-grid">
       <div
         v-for="run in workspaceStore.sortedRuns"
-        :key="run.id"
+        :key="run.slug"
         class="run-card"
         @click="openRun(run.slug)"
       >
         <div class="run-card-header">
           <h3>{{ run.name }}</h3>
-          <span class="run-badge">{{ run.courseLevel }}</span>
+          <span class="run-badge">{{ run.kurs }}</span>
         </div>
         <div class="run-card-meta">
-          <span>{{ run.subject }} &middot; Klasse {{ run.gradeLevel }}</span>
-          <span>{{ formatDate(run.createdAt) }}</span>
+          <span>{{ run.fach }} &middot; {{ run.aufgabenart }}</span>
+          <span>{{ formatDate(run.datum || run.createdAt) }}</span>
         </div>
         <div class="run-card-progress">
           <div class="progress-bar">
             <div
               class="progress-fill"
-              :style="{ width: run.studentCount > 0 ? (run.gradedCount / run.studentCount * 100) + '%' : '0%' }"
+              :style="{ width: run.studentSlugs.length > 0 ? '0%' : '0%' }"
             ></div>
           </div>
-          <span class="progress-text">{{ run.gradedCount }}/{{ run.studentCount }} korrigiert</span>
+          <span class="progress-text">{{ run.studentSlugs.length }} Schüler</span>
         </div>
       </div>
     </div>
+    <CreateRunDialog
+      :open="showCreateDialog"
+      @close="showCreateDialog = false"
+      @created="onRunCreated"
+    />
   </div>
 </template>
 

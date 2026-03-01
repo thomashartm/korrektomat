@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSettingsStore, MODEL_PRESETS } from '../stores/settings.store'
+import ModelSelector from '../components/common/ModelSelector.vue'
 
 const settingsStore = useSettingsStore()
 const anthropicKey = ref('')
@@ -103,19 +104,7 @@ function setDefaultModel(key: string): void {
     <!-- Default Model -->
     <section class="settings-section">
       <h2>Standard-Modell</h2>
-      <div class="model-grid">
-        <div
-          v-for="(config, key) in MODEL_PRESETS"
-          :key="key"
-          class="model-card"
-          :class="{ selected: selectedModel === key }"
-          @click="setDefaultModel(key as string)"
-        >
-          <div class="model-provider">{{ config.provider === 'anthropic' ? 'Anthropic' : 'Google' }}</div>
-          <div class="model-name">{{ key }}</div>
-          <div class="model-id">{{ config.model }}</div>
-        </div>
-      </div>
+      <ModelSelector v-model="selectedModel" @update:model-value="setDefaultModel" />
     </section>
 
     <!-- Workspace -->
@@ -233,48 +222,5 @@ function setDefaultModel(key: string): void {
   font-weight: bold;
 }
 
-.model-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.model-card {
-  background: #1a1a2e;
-  border: 2px solid #2a2a4a;
-  border-radius: 10px;
-  padding: 14px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.model-card:hover {
-  border-color: #4a90d9;
-}
-
-.model-card.selected {
-  border-color: #c00000;
-  background: #1a1020;
-}
-
-.model-provider {
-  font-size: 11px;
-  color: #6a6a8a;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 4px;
-}
-
-.model-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 2px;
-}
-
-.model-id {
-  font-size: 11px;
-  color: #4a4a6a;
-  font-family: 'JetBrains Mono', monospace;
-}
+/* Model selector styles are now in ModelSelector.vue */
 </style>

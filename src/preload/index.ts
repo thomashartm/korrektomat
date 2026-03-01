@@ -14,6 +14,8 @@ const api = {
       ipcRenderer.invoke('workspace:createRun', params),
     getRun: (slug: string): Promise<any> =>
       ipcRenderer.invoke('workspace:getRun', slug),
+    updateRun: (slug: string, updates: any): Promise<any> =>
+      ipcRenderer.invoke('workspace:updateRun', slug, updates),
     deleteRun: (slug: string): Promise<void> =>
       ipcRenderer.invoke('workspace:deleteRun', slug),
     setTaskSheet: (runSlug: string, filePaths: string[]): Promise<string[]> =>

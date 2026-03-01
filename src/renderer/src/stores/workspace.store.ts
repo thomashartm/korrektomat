@@ -1,33 +1,67 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { ModelConfig } from './settings.store'
 
-// Types will be shared via preload API - for now define locally
-export interface RunSummary {
-  id: string
-  slug: string
+export interface CreateRunParams {
   name: string
-  subject: string
-  courseLevel: string
-  gradeLevel: number
-  createdAt: string
-  updatedAt: string
-  studentCount: number
-  gradedCount: number
+  kurs: string
+  datum: string
+  aufgabenart?: string
+  fach?: string
+  modelConfig?: ModelConfig
 }
 
-export interface StudentSummary {
-  id: string
+// ── Types matching backend workspace.schema.ts ──────────────────────────────
+
+export interface RunManifest {
+  name: string
   slug: string
-  displayName: string
+  kurs: string
+  aufgabenart: string
+  fach: string
+  datum: string
+  modelConfig?: ModelConfig
+  taskSheetPages: number
+  studentSlugs: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ScanFile {
+  originalName: string
+  generatedName: string
+  sizeBytes: number
+  width: number
+  height: number
+}
+
+export interface GradingAttempt {
+  startedAt: string
+  completedAt?: string
+  provider: 'anthropic' | 'google'
+  model: string
+  success: boolean
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+export interface StudentManifest {
+  name: string
+  slug: string
   status: string
-  scanCount: number
-  grade?: { total: number; inhalt: number; sprache: number }
+  scans: ScanFile[]
+  gradingHistory: GradingAttempt[]
+  finalGrade?: number
+  gradeLabel?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export const useWorkspaceStore = defineStore('workspace', () => {
-  const runs = ref<RunSummary[]>([])
-  const activeRun = ref<RunSummary | null>(null)
-  const students = ref<StudentSummary[]>([])
+  const runs = ref<RunManifest[]>([])
+  const activeRun = ref<RunManifest | null>(null)
+  const runManifest = ref<RunManifest | null>(null)
+  const students = ref<StudentManifest[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const workspaceAccessError = ref<{ path: string; fallbackAttempted: boolean } | null>(null)
@@ -68,17 +102,68 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function loadRunManifest(slug: string): Promise<void> {
+    try {
+      runManifest.value = await window.api.workspace.getRun(slug)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Lauf konnte nicht geladen werden'
+    }
+  }
+
+  async function updateRunSettings(
+    slug: string,
+    updates: Partial<Pick<RunManifest, 'name' | 'kurs' | 'aufgabenart' | 'fach' | 'datum' | 'modelConfig'>>
+  ): Promise<void> {
+    error.value = null
+    try {
+      runManifest.value = await window.api.workspace.updateRun(slug, updates)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Einstellungen konnten nicht gespeichert werden'
+    }
+  }
+
+  async function addStudent(runSlug: string, name: string): Promise<void> {
+    error.value = null
+    try {
+      await window.api.workspace.addStudent(runSlug, name)
+      await loadStudents(runSlug)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Schüler konnte nicht hinzugefügt werden'
+      throw e
+    }
+  }
+
   async function setActiveRun(slug: string): Promise<void> {
+    // Load runs list if not yet loaded (direct navigation to /runs/:slug)
+    if (runs.value.length === 0) {
+      await loadRuns()
+    }
     const run = runs.value.find((r) => r.slug === slug)
     if (run) {
       activeRun.value = run
-      await loadStudents(slug)
     }
+    await Promise.all([loadRunManifest(slug), loadStudents(slug)])
   }
 
   function clearActiveRun(): void {
     activeRun.value = null
+    runManifest.value = null
     students.value = []
+  }
+
+  async function createRun(params: CreateRunParams): Promise<string> {
+    loading.value = true
+    error.value = null
+    try {
+      const manifest = await window.api.workspace.createRun(params)
+      await loadRuns()
+      return manifest.slug
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Lauf konnte nicht erstellt werden'
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
 
   function registerAccessErrorHandler(): void {
@@ -93,6 +178,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   return {
     runs,
     activeRun,
+    runManifest,
     students,
     loading,
     error,
@@ -100,7 +186,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     sortedRuns,
     gradedStudents,
     pendingStudents,
+    createRun,
     loadRuns,
+    loadRunManifest,
+    updateRunSettings,
+    addStudent,
     loadStudents,
     setActiveRun,
     clearActiveRun,

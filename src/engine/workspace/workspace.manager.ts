@@ -378,6 +378,23 @@ async function updateRunManifest(
   return updated
 }
 
+/**
+ * Public API to update safe-to-edit run settings.
+ * Only allows updating user-facing fields (not slug, timestamps, studentSlugs, taskSheetPages).
+ */
+export async function updateRun(
+  workspaceRoot: string,
+  slug: string,
+  updates: Partial<
+    Pick<RunManifest, 'name' | 'kurs' | 'aufgabenart' | 'fach' | 'datum' | 'modelConfig'>
+  >
+): Promise<RunManifest> {
+  return updateRunManifest(workspaceRoot, slug, (manifest) => ({
+    ...manifest,
+    ...updates
+  }))
+}
+
 // ── TASK SHEET ──────────────────────────────────────────────────────────────
 
 /**

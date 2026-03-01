@@ -7,6 +7,7 @@ interface KorrekturWorkspaceAPI {
   listRuns(): Promise<any[]>
   createRun(params: any): Promise<any>
   getRun(slug: string): Promise<any>
+  updateRun(slug: string, updates: any): Promise<any>
   deleteRun(slug: string): Promise<void>
   setTaskSheet(runSlug: string, filePaths: string[]): Promise<string[]>
   openRunFolder(slug: string): Promise<void>
@@ -17,6 +18,7 @@ interface KorrekturWorkspaceAPI {
   getStudent(runSlug: string, studentSlug: string): Promise<any>
   removeStudent(runSlug: string, studentSlug: string): Promise<void>
   openStudentFolder(runSlug: string, studentSlug: string): Promise<void>
+  onAccessError(callback: (event: { path: string; fallbackAttempted: boolean }) => void): void
 }
 
 interface KorrekturFilesAPI {
