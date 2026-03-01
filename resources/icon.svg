@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="248" fill="#1A1A2E" stroke="#C00000" stroke-width="6"/>
+
+  <!-- Inner gear ring (automaton theme) -->
+  <g transform="translate(256,256)">
+    <!-- Gear teeth -->
+    <g fill="#2A2A4A" stroke="#3A3A5A" stroke-width="2">
+      <rect x="-180" y="-15" width="360" height="30" rx="5" transform="rotate(0)"/>
+      <rect x="-180" y="-15" width="360" height="30" rx="5" transform="rotate(45)"/>
+      <rect x="-180" y="-15" width="360" height="30" rx="5" transform="rotate(90)"/>
+      <rect x="-180" y="-15" width="360" height="30" rx="5" transform="rotate(135)"/>
+    </g>
+    <!-- Inner circle to mask gear -->
+    <circle cx="0" cy="0" r="155" fill="#1A1A2E"/>
+  </g>
+
+  <!-- Red pen body (diagonal, center) -->
+  <g transform="translate(256,256) rotate(-45)">
+    <!-- Pen shaft -->
+    <rect x="-12" y="-120" width="24" height="180" rx="4" fill="#C00000"/>
+    <!-- Pen grip lines -->
+    <line x1="-12" y1="-40" x2="12" y2="-40" stroke="#8B0000" stroke-width="2"/>
+    <line x1="-12" y1="-20" x2="12" y2="-20" stroke="#8B0000" stroke-width="2"/>
+    <line x1="-12" y1="0" x2="12" y2="0" stroke="#8B0000" stroke-width="2"/>
+    <!-- Pen tip -->
+    <polygon points="-12,60 12,60 0,100" fill="#C00000"/>
+    <polygon points="-6,85 6,85 0,100" fill="#FFD700"/>
+    <!-- Pen cap -->
+    <rect x="-14" y="-130" width="28" height="20" rx="4" fill="#8B0000"/>
+    <!-- Metallic clip -->
+    <rect x="12" y="-130" width="4" height="50" rx="2" fill="#C0C0C0"/>
+  </g>
+
+  <!-- Robot eye (single, centered above pen) -->
+  <g transform="translate(256,180)">
+    <!-- Eye housing -->
+    <ellipse cx="0" cy="0" rx="35" ry="25" fill="#2A2A4A" stroke="#4A90D9" stroke-width="3"/>
+    <!-- Eye glow -->
+    <ellipse cx="0" cy="0" rx="18" ry="14" fill="#4A90D9"/>
+    <ellipse cx="0" cy="0" rx="10" ry="8" fill="#7AB8FF"/>
+    <!-- Eye highlight -->
+    <circle cx="5" cy="-4" r="4" fill="white" opacity="0.8"/>
+  </g>
+
+  <!-- Small gears (automaton detail) -->
+  <g transform="translate(160,320)">
+    <circle cx="0" cy="0" r="20" fill="none" stroke="#4A90D9" stroke-width="2.5" stroke-dasharray="8 6"/>
+    <circle cx="0" cy="0" r="8" fill="#4A90D9" opacity="0.5"/>
+  </g>
+  <g transform="translate(352,320)">
+    <circle cx="0" cy="0" r="16" fill="none" stroke="#4A90D9" stroke-width="2" stroke-dasharray="6 5"/>
+    <circle cx="0" cy="0" r="6" fill="#4A90D9" opacity="0.5"/>
+  </g>
+
+  <!-- Checkmark sparks (grading approved) -->
+  <g transform="translate(340,170)" stroke="#196F2B" stroke-width="4" stroke-linecap="round" fill="none">
+    <polyline points="0,12 8,22 24,0"/>
+  </g>
+
+  <!-- "KORREKTOMAT" text arc at bottom -->
+  <defs>
+    <path id="textArc" d="M 80,380 Q 256,460 432,380"/>
+  </defs>
+  <text fill="#C0C0C0" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="bold" letter-spacing="6">
+    <textPath href="#textArc" startOffset="50%" text-anchor="middle">KORREKTOMAT</textPath>
+  </text>
+
+  <!-- Version badge -->
+  <g transform="translate(256,420)">
+    <rect x="-20" y="-8" width="40" height="16" rx="8" fill="#C00000" opacity="0.8"/>
+    <text fill="white" font-family="Arial" font-size="10" text-anchor="middle" dominant-baseline="central">v1</text>
+  </g>
+</svg>

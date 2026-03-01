@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# Caches
+.eslintcache
+*.tsbuildinfo
+
+# Logs
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment / secrets
+.env
+.env.*
+
+# App config (contains API keys)
+.korrekturen/
+
+# Electron builder
+*.dmg
+*.exe
+*.deb
+*.rpm
+*.snap
+*.AppImage
+
+# Test coverage
+coverage/
+
+# Misc
+*.tgz
+.claude/
